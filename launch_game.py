@@ -1,10 +1,14 @@
 from print import *
 import random
 import classes.player as p
+from file_handler.get_places import *
+from file_handler.get_weapons import *
+import time as t
 
 class PlayerNotFoundError(Exception):
         pass
-
+weapons_num_min = 1
+weapons_num_max = 3
 
 '''
 Find a common visited place between the murderer and the victim
@@ -36,14 +40,13 @@ def murder(murderer,players):
         # choose the murder place from the murderer visited places
         place = choose_common_visited_place(victim, murderer)
         if place == None:
-            place = random.choice(murderer.visited_places)
-            victim.visited_places.append(place)
+            continue
         # choose the murder weapon from the murderer favourite weapons
         weapon = random.choice(murderer.fav_weapons)
         killed = True
     if killed == False:
         return None,None
-    return victim,place
+    return victim,place,weapon
 
 
 '''
@@ -73,6 +76,16 @@ def visit(players , places):
     for player in players:
         places_num = random.randint(1, 3)
         player.visited_places = choose_places(places , places_num)  
+        if player.is_murderer == True:
+            visited_places = player.visited_places
+    # To gurentee that at least one player has a common vistited place with the murderer, to avoid infinite loop
+    for player in players:
+        if player.is_murderer == False:
+            player.visited_places.pop()
+            place = random.choice(visited_places)
+            player.visited_places.append(place)
+            break
+    for player in players:
         print(f"player {player.name} visited the following places {player.visited_places}")  
 
 
@@ -82,19 +95,17 @@ parameters: players - a list of player object
 returns: murderer - a player object is selected from the list
 '''
 def pick_murderer(players):
-    try:
-        if not players:
-            raise ValueError("Player list is empty.")
-        murderer = random.choice(players)
-        if not isinstance(players,list) or not isinstance(murderer,p.player):
-            raise ValueError("Input must be a list of player objects.")
-        return murderer
-    except ValueError as ve:
-        print("Error:", ve)
-    except TypeError as te:
-        print("Error:", te)
-    except Exception as e:
-        print("Error:", e)
+    if not players or players == []:
+        raise ValueError("Player list is empty.")
+    murderer = random.choice(players)
+    if not isinstance(players,list) :
+        raise TypeError("Input must be a list of player objects.")
+    if not isinstance(murderer,p.player):
+        raise ValueError("Input must be a list of player objects.")
+
+    murderer.is_murderer = True
+    return murderer
+    
 
 
 ''' 
@@ -154,7 +165,7 @@ def accuse(player1, player2):
             raise ValueError("Input must be a player objects.")
         accused = int(input('Please choose the player you want to accuse: '))
         while accused != player1.name and accused != player2.name:
-            accused = input('Please make sure to choose a player from the list of suspects you provided earlier: ')
+            accused = int(input('Please make sure to choose a player from the list of suspects you provided earlier: '))
         return accused
     except TypeError as te:
         print("Error:", te)
@@ -166,21 +177,24 @@ def accuse(player1, player2):
 Runs a round, a murder happen, and then try to guss the murderer
 parameters: players - a list of player objects
             places - list of strings, all the places in the game
-            weapons - list pf strings, all the weapons in the game 
             murderer - a player object , the murderer of the game
 returns: True - if the player guesses the murderer 
          False - otherwise
 '''
-def round(players,places,weapons, murderer):
+def round(players,places,murderer):
     print('\n New Round Started\n')
     # each player visits between 1 to 3 places
     visit(players,places)
     # a murder occured
-    victim,place = murder(murderer,players)
-    while victim == None :
-        victim,place = murder(murderer,players)
+    victim,place,weapon = murder(murderer,players)
+    # while victim == None :
+    #     victim,place,weopon = murder(murderer,players)
     players.remove(victim)
-    print(f"Player {victim.name} killed in {place}.")
+    print('\n')
+    print(f" *** Player {victim.name} was killed in {place} using {weapon}. *** ")
+    t.sleep(1.0)
+    print('\n')
+    print('......')
     if len(players) == 1:
             return False
     player1 , player2 = suspect(players) 
@@ -197,39 +211,42 @@ if he succeds the game ends and the user wins,else the game continues to another
 if the murderer is the only player remains in the game the game ends and the murderer wins
 parameters: players - a list of player objects
             places - list of strings, all the places in the game
-            weapons - list pf strings, all the weapons in the game 
 returns: None
 '''
-def launch_game(players,places,weapons):
+def launch_game(players,places):
     murderer = pick_murderer(players)
     print(murderer.name)
     success = False
     while(success != True):
         if len(players) == 1:
-            print(f"Game Over, the murderer {murderer.name} win")
+            print(f"\nGame Over, the murderer {murderer.name} win")
             break
-        success = round(players,places,weapons,murderer)
+        success = round(players,places,murderer)
         if success:
-            print('Congratulations! Your accusation is correct. You have found the murderer')
+            print('\nCongratulations! Your accusation is correct. You have found the murderer')
             break
         else:
-            print('Sorry, your accusation is incorrect. You have not found the murderer this time')
+            print('\nSorry, your accusation is incorrect. You have not found the murderer this time')
 
-
-# players = [p.player(i) for i in range(10)]
-# weapons = ['a','b','c','d','e','f','g','h','l','m','n']
-# for player in players:
-#     weapons_num = random.randint(1, 3)
-#     player.fav_weapons = choose_places(weapons , weapons_num) 
-
-# launch_game(players , ['fg','fasdfd','fsadf','fsasdfzd'],weapons)        
-
-
-
-        
 
 '''
-TODO :create an input files, weapons and places
-TODO :write the tests
-TODO :check the errors handling again
+    Set up the game by assigning random favorite weapons to each player,
+    and load the data of places and weapons from the files
+
+    returns:
+        players (list): A list of player objects.
+        places (list): A list of strings , each one is a name of a place.
 '''
+
+def set_up_game():
+    places = get_places('user_data\\places.json')
+    weapons = get_weapons('user_data\\weapons.json')
+    players_num = int(input('please enter the number of players: '))
+    players = [p.player(i) for i in range(players_num)]
+    for player in players:
+        weapons_num = random.randint(weapons_num_min, weapons_num_max)
+        player.fav_weapons = choose_places(weapons , weapons_num)   
+    return players,places   
+
+
+
